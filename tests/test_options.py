@@ -1199,6 +1199,68 @@ def test_missing_envvar_sequence(runner, envvar, expected):
     assert f"Error: Missing option {expected}." in result.output
 
 
+def test_missing_envvar_auto_prefix(runner):
+    cli = click.Command(
+        "cli", params=[click.Option(["--foo"], show_envvar=True, required=True)]
+    )
+    result = runner.invoke(cli, auto_envvar_prefix="TEST")
+    assert result.exit_code == 2
+    assert "Error: Missing option '--foo' (env var: 'TEST_FOO')." in result.output
+
+    # When auto_envvar_prefix is not set, env var hint is omitted
+    result = runner.invoke(cli)
+    assert result.exit_code == 2
+    assert "Error: Missing option '--foo'." in result.output
+
+    # When allow_from_autoenv=False, auto_envvar_prefix is ignored
+    cli_no_auto = click.Command(
+        "cli",
+        params=[
+            click.Option(
+                ["--foo"],
+                show_envvar=True,
+                allow_from_autoenv=False,
+                required=True,
+            )
+        ],
+    )
+    result = runner.invoke(cli_no_auto, auto_envvar_prefix="TEST")
+    assert result.exit_code == 2
+    assert "Error: Missing option '--foo'." in result.output
+
+    # Bad parameter error hint also includes auto env var
+    cli_bad = click.Command(
+        "cli",
+        params=[
+            click.Option(
+                ["--port"],
+                type=int,
+                show_envvar=True,
+                required=True,
+            )
+        ],
+    )
+    result = runner.invoke(
+        cli_bad, ["--port", "not-a-number"], auto_envvar_prefix="TEST"
+    )
+    assert result.exit_code == 2
+    assert (
+        "Error: Invalid value for '--port' (env var: 'TEST_PORT'):"
+        " 'not-a-number' is not a valid integer." in result.output
+    )
+
+
+def test_missing_envvar_auto_prefix_context_settings(runner):
+    @click.command(context_settings={"auto_envvar_prefix": "MYAPP"})
+    @click.option("--port", type=int, required=True, show_envvar=True)
+    def cli(port):
+        pass
+
+    result = runner.invoke(cli, [])
+    assert result.exit_code == 2
+    assert "Error: Missing option '--port' (env var: 'MYAPP_PORT')." in result.output
+
+
 def test_case_insensitive_choice(runner):
     @click.command()
     @click.option("--foo", type=click.Choice(["Orange", "Apple"], case_sensitive=False))
